@@ -10,7 +10,7 @@ struct CPU {
     uint16_t i;
 
     uint16_t stack[16];
-
+    int stack_size;
     uint8_t delay_timer;
     uint8_t sound_timer;
 
@@ -18,7 +18,19 @@ struct CPU {
 
 };
 
+void push(struct CPU *cpu, uint16_t add) {
+    cpu->stack[cpu->stack_size] = add;
+    cpu->stack_size+=1;
+}
+uint16_t pop(struct CPU *cpu) {
+    uint16_t temp;
+    temp = cpu->stack[cpu->stack_size - 1];
+    printf("TEMP: %X", temp);
+    cpu->stack[cpu->stack_size - 1] = 0;
 
+    cpu->stack_size -= 1;
+    return temp;
+}
 int loadsSpritesIntoMemory(uint8_t memory[]) {
     // each element F, 0 is 4 bits, two f0 is 8, becoming a bit
     // multiply value by 16^position
@@ -106,8 +118,77 @@ void loadFile(char *filename, struct CPU *cpu) {
 void readOpcode(struct CPU *cpu, uint16_t opcode) {
         uint8_t x = (opcode & 0xF00) >> 8;
         uint8_t y = (opcode & 0x00F0) >> 4;
-        printf("\n%X\n", opcode);
+        printf("\n\n--%04X--\n", opcode);
         printf("\nInstruction %d \nValue X: %02X\n Value Y: %02X\n OPCODE: %04X\n", 0, x, y, opcode & 0xF000);
+
+        switch(opcode & 0xF000) {
+            case 0x0000:
+                printf("0x000");
+                switch(opcode) {
+                    case 0x00E0:
+                    printf("CLEAR DISPLAY");
+                        break;
+                    case 0x00EE:
+                    printf("POP STACK - STORE IN PC");
+                        break;
+                }
+                break;
+            case 0x1000:
+                printf("\nJP addr");
+                printf("\nnnn %03X", opcode & 0xFFF);
+                //cpu->pc = opcode & 0xFFF;
+                //printf("PC CHANGE: %03X", cpu->pc);
+                break; 
+            case 0x2000:
+                printf("CALL addr");
+                printf("\nnnn:%03X", opcode & 0xFFF);
+                break; 
+            case 0x3000:
+                printf("V%X EQUALS ? %02X - %04X \n", x, opcode & 0xFF, opcode); 
+                //if (cpu->V[x] == (opcode & 0xFF)) {
+                //    cpu->pc += 2;
+                //}
+                break; 
+            case 0x4000:
+                printf("SNE - SKIP INSTRUCTION IF NOT EQUAL");
+                printf("V%X EQUALS ? %02X - %04X \n", x, opcode & 0xFF, opcode); 
+                break; 
+            case 0x5000:
+                printf("SE Vx Vy");
+                printf("V%X = V%X?", x, y);
+                break; 
+            case 0x6000:
+                printf("SET V%X to %02X\n", x, opcode & 0xFF);
+                printf("0x600");
+                break; 
+            case 0x7000:
+                printf("0x700");
+                break; 
+            case 0x8000:
+                printf("0x800o");
+                switch(opcode & 0xF) {
+                    case 0x0:
+                        printf("\nSET V%X = V%X", x, y);
+                        break;
+                    case 0x1:
+                        break;
+                    case 0x2:
+                        break;
+                    case 0x3:
+                        break;
+                    case 0x4:
+                        break;
+                    case 0x5:
+                        break;
+                    case 0x6:
+                        break;
+                    case 0x7:
+                        break;
+                    case 0xE:
+                        break;
+                }
+                break; 
+        };
         cpu->pc += 2;
 }
 void execute(struct CPU *cpu, int limit) {
@@ -121,13 +202,19 @@ void printMemory(struct CPU *cpu, int limit) {
         printf("%d %02X \n", i, cpu->memory[i]);
     }
 }
+void initialize(struct CPU *cpu) {
+    cpu->pc = START_ADDRESS;
+    cpu->stack_size = 0;
+    loadsSpritesIntoMemory(cpu->memory);
+}
 int main(){
     struct CPU cpu;
-    cpu.pc = START_ADDRESS;
-    loadsSpritesIntoMemory(cpu.memory);
-    loadFile("test_opcode.ch8", &cpu);
-    printMemory(&cpu, 548);
-    execute(&cpu, 10);
-
+    initialize(&cpu);
+    //loadFile("IBM Logo.ch8", &cpu);
+    //execute(&cpu, 100);
+    push(&cpu, 0xE1);
+    printf("%X", cpu.stack[cpu.stack_size-1]);
+    printf("\n%X", pop(&cpu));
+    printf("\n%X - %d", cpu.stack[cpu.stack_size], cpu.stack_size);
     return 0;
 }
