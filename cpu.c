@@ -2,6 +2,8 @@
 #include <stdint.h>
 #include <stdlib.h>
 
+#define START_ADDRESS 0x200
+
 struct CPU {
     uint8_t memory[4096];
     uint8_t V[16];
@@ -15,29 +17,38 @@ struct CPU {
     uint16_t pc;
 
 };
-typedef struct {
-    uint8_t opcode;
-    uint8_t x;
-    uint8_t y;
-    uint8_t kk;
-    uint16_t nnn;
 
-} Chip8Instruction;
+void LoadROM(struct CPU *cpu, const char *filename) {
+    FILE *file = fopen(filename, "rb");
 
-uint16_t encodeInstruction(Chip8Instruction instruction) {
-    uint16_t encodedInstruction = 0;
+    if(file != NULL) {
+        fseek(file, 0, SEEK_END);
+        long size = ftell(file);
+        fseek(file, 0, SEEK_SET);
 
-    encodedInstruction |= (instruction.opcode & 0xFF) << 12;
-    encodedInstruction |= (instruction.x & 0xF) << 8;
-    encodedInstruction |= (instruction.y & 0xF) << 4;
-    encodedInstruction |= (instruction.kk & 0xFF);
+        u_int8_t *buffer = (uint8_t*)malloc(size);
 
-    return encodedInstruction;
+        if (buffer != NULL) {
+            fread(buffer, 1, size, file);
+            fclose(file);
+
+            for(long i = 0; i < size; i++) {
+                cpu->memory[START_ADDRESS+i] = buffer[i];
+            }
+            free(buffer);
+        } else {
+            perror("Memory allocation failed");
+            fclose(file);
+        }
+    } else {
+        perror("Failed to open file");
+    }
 }
-void loadsSpritesIntoMemory(uint8_t memory[]) {
+
+int loadsSpritesIntoMemory(uint8_t memory[]) {
     // each element F, 0 is 4 bits, two f0 is 8, becoming a bit
     // multiply value by 16^position
-
+    int index = 0;
     const uint8_t sprites[] = {
         0xF0, 0x90, 0x90, 0x90, 0xF0, // 0
         0x20, 0x60, 0x20, 0x20, 0x70, // 1
@@ -58,44 +69,74 @@ void loadsSpritesIntoMemory(uint8_t memory[]) {
     };
     int length = sizeof(sprites) / sizeof(sprites[0]);
     for(int i = 0; i < length; i++) {
+        index++;
         memory[i] = sprites[i];
     }
+    return index;
+}
+size_t readHexCodesFromFile(const char *filename, uint16_t *hexValues, size_t maxValues) {
+    FILE *file;
+    size_t numHexValues = 0;
+
+
+    file = fopen(filename, "rb");
+
+    if(file == NULL) {
+        perror("Error opening file");
+    }
+
+    while(numHexValues < maxValues && fread(&hexValues[numHexValues], sizeof(uint16_t), 1, file) == 1) {
+        numHexValues++;
+    }
+    fclose(file);
+
+    return numHexValues;
 }
 
+void splitHexCode(uint16_t hexCode, uint8_t *byte1, uint8_t *byte2) {
+    *byte1 = (uint8_t)(hexCode & 0xFF); 
+    *byte2 = (uint8_t)((hexCode >> 8) & 0xFF);
+}
 // input is 8 bit array
-void loadProgramIntoMemory(uint8_t program[], int length, struct CPU *cpu) {
-    for(int loc = 0; loc < length; loc++) {
-        cpu->memory[0x200 + loc] = program[loc];
+
+void loadHexValues(uint16_t hexValues[], struct CPU *cpu, size_t numHexValues) {
+    uint8_t b1;
+    uint8_t b2;
+
+    int memoryIndex = 0;
+    for(size_t i = 0; i < numHexValues; i++) {
+        printf("Hex Code %zu: 0x%04X\n", i + 1, hexValues[i]);
+        splitHexCode(hexValues[i], &b1, &b2);
+        printf("%02X %02X \n", b1, b2);
+        // lets store byte 1 first
+        cpu->memory[START_ADDRESS + memoryIndex] = b2;
+        cpu->memory[START_ADDRESS + memoryIndex + 1] = b1;
+        memoryIndex+= 2;
+    }
+}
+void loadFile(char *filename, struct CPU *cpu) {
+
+    size_t numHexValues;
+    uint16_t hexValues[100];
+
+    numHexValues = readHexCodesFromFile(filename, hexValues, 100);
+    
+    if (numHexValues == 0) {
+        printf("No hex codes read from the file.\n");
+    } else {
+        printf("Hex Codes read: %zu\n", numHexValues);
+        loadHexValues(hexValues, cpu, numHexValues);
+    }
+} 
+void printMemory(struct CPU *cpu) {
+    for(int i = 0; i < 548; i++) {
+        printf("%d %02X \n", i, cpu->memory[i]);
     }
 }
 int main(){
     struct CPU cpu;
     loadsSpritesIntoMemory(cpu.memory);
-
-   FILE *file = fopen("chip8_instructions.txt", "r");
-   if(file == NULL) {
-    perror("Error opening file");
-    return 1;
-   }
-
-   uint16_t memory[4096] = {0};
-   Chip8Instruction instruction;
-   int memoryIndex = 0;
-
-   while(fscanf(file, "%hhx %hhx %hhx %hhx %hx",
-    &instruction.opcode, &instruction.x, &instruction.y, &instruction.kk, &instruction.nnn) == 5) {
-        uint16_t encodedInstruction = encodeInstruction(instruction);
-        printf("0x%X\n", encodedInstruction);
-        if(memoryIndex < 4096) {
-            memory[memoryIndex] = encodedInstruction;
-            memoryIndex++;
-        } else {
-            fprintf(stderr, "Memory overflow. Cannot load more instructions\n");
-            break;
-        }
-    }
-    fclose(file);
-
-
+    loadFile("test_opcode.ch8", &cpu);
+    printMemory(&cpu);
     return 0;
 }
