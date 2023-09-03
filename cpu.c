@@ -18,32 +18,6 @@ struct CPU {
 
 };
 
-void LoadROM(struct CPU *cpu, const char *filename) {
-    FILE *file = fopen(filename, "rb");
-
-    if(file != NULL) {
-        fseek(file, 0, SEEK_END);
-        long size = ftell(file);
-        fseek(file, 0, SEEK_SET);
-
-        u_int8_t *buffer = (uint8_t*)malloc(size);
-
-        if (buffer != NULL) {
-            fread(buffer, 1, size, file);
-            fclose(file);
-
-            for(long i = 0; i < size; i++) {
-                cpu->memory[START_ADDRESS+i] = buffer[i];
-            }
-            free(buffer);
-        } else {
-            perror("Memory allocation failed");
-            fclose(file);
-        }
-    } else {
-        perror("Failed to open file");
-    }
-}
 
 int loadsSpritesIntoMemory(uint8_t memory[]) {
     // each element F, 0 is 4 bits, two f0 is 8, becoming a bit
@@ -108,7 +82,7 @@ void loadHexValues(uint16_t hexValues[], struct CPU *cpu, size_t numHexValues) {
         printf("Hex Code %zu: 0x%04X\n", i + 1, hexValues[i]);
         splitHexCode(hexValues[i], &b1, &b2);
         printf("%02X %02X \n", b1, b2);
-        // lets store byte 1 first
+        // lets store byte 2 first
         cpu->memory[START_ADDRESS + memoryIndex] = b2;
         cpu->memory[START_ADDRESS + memoryIndex + 1] = b1;
         memoryIndex+= 2;
@@ -128,15 +102,32 @@ void loadFile(char *filename, struct CPU *cpu) {
         loadHexValues(hexValues, cpu, numHexValues);
     }
 } 
-void printMemory(struct CPU *cpu) {
-    for(int i = 0; i < 548; i++) {
+
+void readOpcode(struct CPU *cpu, uint16_t opcode) {
+        uint8_t x = (opcode & 0xF00) >> 8;
+        uint8_t y = (opcode & 0x00F0) >> 4;
+        printf("\n%X\n", opcode);
+        printf("\nInstruction %d \nValue X: %02X\n Value Y: %02X\n OPCODE: %04X\n", 0, x, y, opcode & 0xF000);
+        cpu->pc += 2;
+}
+void execute(struct CPU *cpu, int limit) {
+    for(int i = 0; i < limit; i++) {
+        uint16_t opcode = cpu->memory[cpu->pc] << 8 | cpu->memory[cpu->pc + 1];
+        readOpcode(cpu, opcode);
+    }
+}
+void printMemory(struct CPU *cpu, int limit) {
+    for(int i = 0; i < limit; i++) {
         printf("%d %02X \n", i, cpu->memory[i]);
     }
 }
 int main(){
     struct CPU cpu;
+    cpu.pc = START_ADDRESS;
     loadsSpritesIntoMemory(cpu.memory);
     loadFile("test_opcode.ch8", &cpu);
-    printMemory(&cpu);
+    printMemory(&cpu, 548);
+    execute(&cpu, 10);
+
     return 0;
 }
