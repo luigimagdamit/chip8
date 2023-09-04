@@ -129,7 +129,9 @@ void readOpcode(struct CPU *cpu, uint16_t opcode) {
                     printf("CLEAR DISPLAY");
                         break;
                     case 0x00EE:
-                    printf("POP STACK - STORE IN PC");
+                        printf("POP STACK - STORE IN PC - CURRENT PC = %X\n", cpu->pc);
+                        cpu->pc = pop(cpu);
+                        printf("\nCURRENT PC: %X", cpu->pc);
                         break;
                 }
                 break;
@@ -210,11 +212,8 @@ void initialize(struct CPU *cpu) {
 int main(){
     struct CPU cpu;
     initialize(&cpu);
-    //loadFile("IBM Logo.ch8", &cpu);
-    //execute(&cpu, 100);
-    push(&cpu, 0xE1);
-    printf("%X", cpu.stack[cpu.stack_size-1]);
-    printf("\n%X", pop(&cpu));
-    printf("\n%X - %d", cpu.stack[cpu.stack_size], cpu.stack_size);
+    loadFile("IBM Logo.ch8", &cpu);
+  //  execute(&cpu, 100);
+    readOpcode(&cpu, 0x00EE);
     return 0;
 }
