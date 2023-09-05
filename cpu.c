@@ -1,8 +1,10 @@
 #include <stdio.h>
 #include <stdint.h>
 #include <stdlib.h>
+#include <time.h>
 
 #define START_ADDRESS 0x200
+
 
 struct CPU {
     uint8_t memory[4096];
@@ -18,6 +20,12 @@ struct CPU {
 
 };
 
+uint8_t generateRandom() {
+    srand(time(NULL));
+    uint8_t res = rand();
+    return res * 0xFF; 
+
+}
 void push(struct CPU *cpu, uint16_t add) {
     cpu->stack[cpu->stack_size] = add;
     cpu->stack_size+=1;
@@ -25,7 +33,6 @@ void push(struct CPU *cpu, uint16_t add) {
 uint16_t pop(struct CPU *cpu) {
     uint16_t temp;
     temp = cpu->stack[cpu->stack_size - 1];
-    printf("TEMP: %X", temp);
     cpu->stack[cpu->stack_size - 1] = 0;
 
     cpu->stack_size -= 1;
@@ -118,6 +125,10 @@ void loadFile(char *filename, struct CPU *cpu) {
 void readOpcode(struct CPU *cpu, uint16_t opcode) {
         uint8_t x = (opcode & 0xF00) >> 8;
         uint8_t y = (opcode & 0x00F0) >> 4;
+        uint8_t sum = (cpu->V[x] + cpu->V[y]);
+
+
+        uint8_t random = generateRandom();
         printf("\n\n--%04X--\n", opcode);
         printf("\nInstruction %d \nValue X: %02X\n Value Y: %02X\n OPCODE: %04X\n", 0, x, y, opcode & 0xF000);
 
@@ -138,59 +149,121 @@ void readOpcode(struct CPU *cpu, uint16_t opcode) {
             case 0x1000:
                 printf("\nJP addr");
                 printf("\nnnn %03X", opcode & 0xFFF);
-                //cpu->pc = opcode & 0xFFF;
-                //printf("PC CHANGE: %03X", cpu->pc);
+                cpu->pc = opcode & 0xFFF;
+                printf("\nPC CHANGE to nnn: %03X\n", cpu->pc);
                 break; 
             case 0x2000:
                 printf("CALL addr");
                 printf("\nnnn:%03X", opcode & 0xFFF);
                 break; 
             case 0x3000:
-                printf("V%X EQUALS ? %02X - %04X \n", x, opcode & 0xFF, opcode); 
-                //if (cpu->V[x] == (opcode & 0xFF)) {
-                //    cpu->pc += 2;
-                //}
+                printf("V%X (%X) EQUALS ? %02X - %04X \n", x, cpu->V[x], opcode & 0xFF, opcode); 
+                if (cpu->V[x] == (opcode & 0xFF)) {
+                    printf("true");
+                    cpu->pc += 2;
+                }
                 break; 
             case 0x4000:
-                printf("SNE - SKIP INSTRUCTION IF NOT EQUAL");
-                printf("V%X EQUALS ? %02X - %04X \n", x, opcode & 0xFF, opcode); 
+                printf("V%X (%X) NOT EQUALS ? %02X - %04X \n", x, cpu->V[x], opcode & 0xFF, opcode); 
+                if (cpu->V[x] != (opcode & 0xFF)) {
+                    printf("true");
+                    cpu->pc += 2;
+                }
                 break; 
             case 0x5000:
                 printf("SE Vx Vy");
                 printf("V%X = V%X?", x, y);
+                if (cpu->V[x] == cpu->V[y]) {
+                    printf("true");
+                    cpu->pc += 2;
+                }
                 break; 
             case 0x6000:
                 printf("SET V%X to %02X\n", x, opcode & 0xFF);
                 printf("0x600");
+                cpu->V[x] = (opcode & 0xFF);
                 break; 
             case 0x7000:
                 printf("0x700");
+                cpu->V[x] += (opcode & 0xFF);
                 break; 
             case 0x8000:
                 printf("0x800o");
                 switch(opcode & 0xF) {
                     case 0x0:
                         printf("\nSET V%X = V%X", x, y);
+                        cpu->V[x] = cpu->V[y];
                         break;
                     case 0x1:
+                        cpu->V[x] |= cpu->V[y];
                         break;
                     case 0x2:
+                        cpu->V[x] &= cpu->V[y];
                         break;
                     case 0x3:
+                        cpu->V[x] ^= cpu->V[y];
                         break;
                     case 0x4:
+                        cpu->V[0xF] = 0;
+
+                        if(sum > 0xFF) {
+                            cpu->V[0xF] = 1;
+                        }
+                        cpu->V[x] = sum;
                         break;
                     case 0x5:
+                        cpu->V[0xF] = 0;
+                        if(cpu->V[x] > cpu->V[y]) {
+                            cpu->V[0xF] = 1;
+                        }
+                        
+                        cpu->V[x] -= cpu->V[y];
                         break;
                     case 0x6:
+                        cpu->V[0xF] = cpu->V[x] & 0x1;
+                        cpu->V[x] >>= 1;
                         break;
                     case 0x7:
+                        cpu->V[0xF] = 0;
+                        
+                        if(cpu->V[y] > cpu->V[x]) {
+                            cpu->V[0xF] = 1;
+                        }
+                        cpu->V[x] = cpu->V[y] - cpu->V[x];
                         break;
                     case 0xE:
+                        cpu->V[0xF] = (cpu->V[x] & 0x80);
+                        cpu->V[x] <<= 1;
                         break;
                 }
                 break; 
-        };
+        case 0x9000:
+            printf("\n9000: V[%X] ?= V[%X]", x, y);
+            //if(cpu->V[x] !== cpu->V[y]) {
+            //    cpu->pc = cpu->pc + 2;
+            //}
+            if(cpu->V[x] != cpu->V[y]) {
+                printf("CASE NOTED");
+                cpu->pc += 2;
+            }
+            break;
+        
+        case 0xA000:
+            cpu->i = (opcode & 0xFFF);
+            break;
+        case 0xB000:
+            cpu->pc = (opcode & 0xFFF) + cpu->V[0];
+            break;
+        case 0xC000:
+            printf("\nRANDOM NUMBER: %02X\n", random);
+            cpu->V[x] = random & (opcode & 0xFF);
+            printf("\nVx: %02X\n", cpu->V[x]);
+            break;
+        case 0xD000:
+            break;
+        case 0xE000:
+            break;
+        };  
         cpu->pc += 2;
 }
 void execute(struct CPU *cpu, int limit) {
@@ -201,7 +274,18 @@ void execute(struct CPU *cpu, int limit) {
 }
 void printMemory(struct CPU *cpu, int limit) {
     for(int i = 0; i < limit; i++) {
-        printf("%d %02X \n", i, cpu->memory[i]);
+        printf("\n|---MEM POS: %d - CONTENT: %02X--|\n", i, cpu->memory[i]);
+    }
+}
+void printStack(struct CPU *cpu) {
+    for(int i = 0; i < 16; i++) {
+        printf("\n|---%04X---|\n", cpu->stack[i]);
+    }
+    printf("\n--END OF STACK--\n");
+}
+void printRegisters(struct CPU *cpu) {
+    for(int i = 0; i < 16; i++) {
+        printf("\n---V[%d]: %02X---\n", i, cpu->V[i]);
     }
 }
 void initialize(struct CPU *cpu) {
@@ -213,7 +297,12 @@ int main(){
     struct CPU cpu;
     initialize(&cpu);
     loadFile("IBM Logo.ch8", &cpu);
-  //  execute(&cpu, 100);
-    readOpcode(&cpu, 0x00EE);
+    execute(&cpu, 100);
+    push(&cpu, 0xFFFF);
+    push(&cpu, 0xFFFE);
+    cpu.V[2] = 0x03;
+    printf("\n%X\n", cpu.pc);
+    readOpcode(&cpu, 0xC210);
+    printf("\n%X\n", cpu.pc);
     return 0;
 }
